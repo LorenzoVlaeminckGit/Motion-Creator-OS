@@ -1,0 +1,6 @@
+{
+  "name": "Kinetik Studio",
+  "description": "AI-powered motion graphics workstation for designing animated vector objects, kinetic typography, keyframe timelines, and exporting motion graphic videos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
