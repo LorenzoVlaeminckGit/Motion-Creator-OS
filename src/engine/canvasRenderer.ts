@@ -1,5 +1,6 @@
 import { applyEasing, clamp, hexToRgba, lerp } from './easing';
 import { evaluateObjectState, getTextScramble, seededRandom } from './motionEngine';
+import type { SnapGuide } from './smartSnap';
 import type {
   EvaluatedObjectState,
   MotionComposition,
@@ -11,6 +12,7 @@ export interface RenderOptions {
   showGuides?: boolean;
   showSafeZones?: boolean;
   interactiveOverlay?: boolean;
+  snapGuides?: SnapGuide[];
 }
 
 function createFillStyle(
@@ -584,6 +586,81 @@ export function renderCompositionFrame(
       ctx.restore();
     }
 
+    if (options.snapGuides && options.snapGuides.length > 0) {
+      const invZoom = 1 / Math.max(0.3, camera.zoom);
+      for (const guide of options.snapGuides) {
+        ctx.save();
+        const isCanvasCenter = guide.kind === 'canvas-center';
+        const guideColor = isCanvasCenter ? '#22D3EE' : '#F472B6';
+
+        ctx.strokeStyle = guideColor;
+        ctx.lineWidth = (isCanvasCenter ? 2.2 : 1.8) * invZoom;
+        ctx.shadowBlur = isCanvasCenter ? 10 : 6;
+        ctx.shadowColor = isCanvasCenter
+          ? 'rgba(34, 211, 238, 0.7)'
+          : 'rgba(244, 114, 182, 0.55)';
+
+        if (guide.kind === 'object-edge') {
+          ctx.setLineDash([8 * invZoom, 5 * invZoom]);
+        } else {
+          ctx.setLineDash([]);
+        }
+
+        const start = isCanvasCenter ? 0 : Math.max(0, guide.spanStart);
+        const end = isCanvasCenter
+          ? guide.axis === 'x'
+            ? height
+            : width
+          : Math.min(guide.axis === 'x' ? height : width, guide.spanEnd);
+
+        ctx.beginPath();
+        if (guide.axis === 'x') {
+          ctx.moveTo(guide.position, start);
+          ctx.lineTo(guide.position, end);
+        } else {
+          ctx.moveTo(start, guide.position);
+          ctx.lineTo(end, guide.position);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+
+        // Draw alignment tag near margin / span edge
+        const uiScale = Math.max(width, height) / 1100;
+        const fontSize = Math.round(13 * uiScale * invZoom);
+        ctx.font = `600 ${fontSize}px "JetBrains Mono", monospace`;
+        const padX = 8 * uiScale * invZoom;
+        const padY = 5 * uiScale * invZoom;
+        const textW = ctx.measureText(guide.label).width;
+        const badgeW = textW + padX * 2;
+        const badgeH = fontSize + padY * 2;
+
+        const margin = 12 * uiScale;
+        const badgeX =
+          guide.axis === 'x'
+            ? clamp(guide.position + 10 * uiScale * invZoom, margin, width - badgeW - margin)
+            : clamp(start + 12 * uiScale * invZoom, margin, width - badgeW - margin);
+        const badgeY =
+          guide.axis === 'x'
+            ? clamp(start + 14 * uiScale * invZoom, margin, height - badgeH - margin)
+            : clamp(guide.position - badgeH - 8 * uiScale * invZoom, margin, height - badgeH - margin);
+
+        ctx.fillStyle = 'rgba(13, 15, 19, 0.94)';
+        drawRoundedRectPath(ctx, badgeX, badgeY, badgeW, badgeH, 5 * uiScale * invZoom);
+        ctx.fill();
+        ctx.strokeStyle = guideColor;
+        ctx.lineWidth = 1.2 * uiScale * invZoom;
+        ctx.stroke();
+
+        ctx.fillStyle = guideColor;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(guide.label, badgeX + padX, badgeY + badgeH / 2 + 0.5);
+
+        ctx.restore();
+      }
+    }
+
     if (selectedState && selectedState.obj.visible) {
       const { state } = selectedState;
       ctx.save();
@@ -596,6 +673,15 @@ export function renderCompositionFrame(
       ctx.strokeStyle = '#3B82F6';
       ctx.lineWidth = 2.5 / Math.max(0.25, camera.zoom);
       ctx.strokeRect(-hw, -hh, state.width, state.height);
+
+      // Center pivot indicator when snapping
+      if (options.snapGuides && options.snapGuides.length > 0) {
+        const dotR = 4.5 / Math.max(0.3, camera.zoom);
+        ctx.fillStyle = '#22D3EE';
+        ctx.beginPath();
+        ctx.arc(0, 0, dotR, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // Corner handles
       const handleSize = 10 / Math.max(0.3, camera.zoom);

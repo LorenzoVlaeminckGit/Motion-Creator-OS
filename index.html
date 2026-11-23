@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Kinetik Studio — Motion Graphics & Video Generator</title>
     <meta
       name="description"
@@ -15,6 +15,16 @@
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      try {
+        var savedTheme = localStorage.getItem('kinetik_studio_theme_v1');
+        if (savedTheme === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,7 +32,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="bg-[#0D0F13] text-[#EEF1F6] antialiased selection:bg-blue-500/30 selection:text-white">
+  <body class="bg-slate-100 dark:bg-[#0D0F13] text-slate-900 dark:text-[#EEF1F6] antialiased selection:bg-blue-500/30 selection:text-slate-950 dark:selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

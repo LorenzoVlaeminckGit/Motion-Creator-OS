@@ -209,31 +209,31 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="export-modal-title"
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
     >
-      <div className="w-full max-w-xl rounded-xl border border-slate-800 bg-[#131720] shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-          <h2 id="export-modal-title" className="font-display text-base font-bold text-white">
+      <div className="w-full max-w-xl max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131720] shadow-2xl">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h2 id="export-modal-title" className="font-display text-base font-bold text-slate-900 dark:text-white">
             Export & Project Studio
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close export modal"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            className="p-2 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="px-5 pt-3 border-b border-slate-800 flex gap-4">
+        <div className="px-5 pt-3 border-b border-slate-200 dark:border-slate-800 flex gap-4">
           <button
             type="button"
             onClick={() => setActiveTab('video')}
-            className={`pb-2.5 text-xs font-semibold border-b-2 cursor-pointer ${
+            className={`pb-2.5 text-xs font-semibold border-b-2 cursor-pointer whitespace-nowrap ${
               activeTab === 'video'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-blue-600 dark:border-blue-500 text-slate-900 dark:text-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             Video & Frame Export
@@ -241,10 +241,10 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('project')}
-            className={`pb-2.5 text-xs font-semibold border-b-2 cursor-pointer ${
+            className={`pb-2.5 text-xs font-semibold border-b-2 cursor-pointer whitespace-nowrap ${
               activeTab === 'project'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-blue-600 dark:border-blue-500 text-slate-900 dark:text-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             Project JSON Backup
@@ -254,16 +254,16 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
         <div className="p-5 space-y-4">
           {activeTab === 'video' ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="exp-scale" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="exp-scale" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Resolution Scale
                   </label>
                   <select
                     id="exp-scale"
                     value={exportScale}
                     onChange={(e) => setExportScale(Number(e.target.value))}
-                    className="w-full bg-[#1B202C] border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100"
+                    className="w-full bg-slate-50 dark:bg-[#1B202C] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
                   >
                     <option value={0.5}>
                       0.5x ({Math.round(composition.width * 0.5)}×{Math.round(composition.height * 0.5)})
@@ -274,14 +274,14 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="exp-bitrate" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="exp-bitrate" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Video Bitrate
                   </label>
                   <select
                     id="exp-bitrate"
                     value={bitrateMbps}
                     onChange={(e) => setBitrateMbps(Number(e.target.value))}
-                    className="w-full bg-[#1B202C] border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100"
+                    className="w-full bg-slate-50 dark:bg-[#1B202C] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
                   >
                     <option value={8}>8 Mbps (Web)</option>
                     <option value={14}>14 Mbps (High)</option>
@@ -292,11 +292,11 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
 
               {rendering && (
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-300 font-mono-tabular">
+                  <div className="flex justify-between text-xs text-slate-700 dark:text-slate-300 font-mono-tabular">
                     <span>Rendering WebM frames...</span>
                     <span>{progress}%</span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                  <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                     <div
                       className="h-full bg-blue-500 transition-all duration-150"
                       style={{ width: `${progress}%` }}
@@ -307,8 +307,8 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
 
               {videoUrl && (
                 <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-emerald-300">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
                       Render complete ({composition.duration}s WebM)
                     </span>
                     <button
@@ -329,13 +329,13 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                     src={videoUrl}
                     controls
                     loop
-                    className="w-full rounded border border-slate-800 max-h-48 bg-black"
+                    className="w-full rounded border border-slate-300 dark:border-slate-800 max-h-48 bg-black"
                   />
                 </div>
               )}
 
               {error && (
-                <div role="alert" className="text-xs text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-3 py-2">
+                <div role="alert" className="text-xs text-red-700 dark:text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-3 py-2">
                   {error}
                 </div>
               )}
@@ -345,7 +345,7 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExportPng}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-700 bg-[#1B202C] hover:bg-slate-800 text-xs font-medium text-slate-200 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 min-h-[40px] sm:min-h-0 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-[#1B202C] dark:hover:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>PNG Frame</span>
@@ -353,7 +353,7 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExportSvg}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-700 bg-[#1B202C] hover:bg-slate-800 text-xs font-medium text-slate-200 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 min-h-[40px] sm:min-h-0 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-[#1B202C] dark:hover:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     <Code2 className="w-3.5 h-3.5" />
                     <span>SVG Snapshot</span>
@@ -364,7 +364,7 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                   type="button"
                   onClick={handleExportVideo}
                   disabled={rendering}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[42px] sm:min-h-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white cursor-pointer"
                 >
                   <Film className="w-3.5 h-3.5" />
                   <span>{rendering ? 'Encoding Video...' : 'Render WebM Video'}</span>
@@ -373,14 +373,14 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
             </>
           ) : (
             <div className="space-y-4">
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 Save your entire motion composition—including objects, procedural generators, keyframes, and camera settings—as a portable JSON file.
               </p>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={handleExportProjectJson}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[42px] sm:min-h-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white cursor-pointer"
                 >
                   <FileJson className="w-4 h-4" />
                   <span>Download .kinetik.json</span>
@@ -388,7 +388,7 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-700 bg-[#1B202C] hover:bg-slate-800 text-xs font-medium text-slate-200 cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[42px] sm:min-h-0 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-[#1B202C] dark:hover:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 cursor-pointer"
                 >
                   <Upload className="w-4 h-4" />
                   <span>Import Project JSON</span>
@@ -402,7 +402,7 @@ export const ExportStudioModal: React.FC<ExportStudioModalProps> = ({
                 />
               </div>
               {error && (
-                <div role="alert" className="text-xs text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-3 py-2">
+                <div role="alert" className="text-xs text-red-700 dark:text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-3 py-2">
                   {error}
                 </div>
               )}

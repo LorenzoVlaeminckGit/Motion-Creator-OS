@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  Cpu,
   ImagePlus,
   LayoutGrid,
   Layers,
@@ -11,6 +12,12 @@ import {
   Wand2,
   Zap,
 } from 'lucide-react';
+import {
+  DEFAULT_AI_MODEL_ID,
+  FREE_AI_MODELS,
+  type AiModelAvailability,
+  type AiModelFamily,
+} from '../data/aiModels';
 import {
   applyAutoComposePlan,
   applyStyleTransferResult,
@@ -103,6 +110,53 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
 
+  // Multi-provider free model selector state
+  const [models, setModels] = useState<AiModelAvailability[]>(() =>
+    FREE_AI_MODELS.map((m) => ({ ...m, configured: m.keyless })),
+  );
+  const [familyFilter, setFamilyFilter] = useState<'all' | AiModelFamily>('all');
+  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_AI_MODEL_ID);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/ai/models')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        if (!active || !payload || !Array.isArray(payload.models)) return;
+        setModels(payload.models);
+      })
+      .catch(() => {
+        // retain built-in catalog fallback
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredModels = useMemo(() => {
+    if (familyFilter === 'all') return models;
+    return models.filter((m) => m.family === familyFilter);
+  }, [models, familyFilter]);
+
+  const selectedModel = useMemo(
+    () => models.find((m) => m.id === selectedModelId) ?? models[0],
+    [models, selectedModelId],
+  );
+
+  const visionModels = useMemo(() => models.filter((m) => m.supportsVision), [models]);
+
+  const handleFamilySelect = (nextFamily: 'all' | AiModelFamily) => {
+    setFamilyFilter(nextFamily);
+    setError(null);
+    if (nextFamily !== 'all') {
+      const candidates = models.filter((m) => m.family === nextFamily);
+      if (candidates.length > 0 && !candidates.some((m) => m.id === selectedModelId)) {
+        const preferred = candidates.find((m) => m.configured) ?? candidates[0];
+        setSelectedModelId(preferred.id);
+      }
+    }
+  };
+
   const handleStyleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -139,6 +193,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            modelId: selectedModelId,
             mediaKind: styleRef.kind,
             frames: styleRef.frames.map((f) => ({
               mimeType: f.mimeType,
@@ -162,9 +217,12 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           adaptMotion,
         });
         onApplyScene(nextComp);
+        const usedTag = data.modelUsed?.label ? ` (${data.modelUsed.label})` : '';
         setStatusNote(
-          data.styleTransfer?.styleSummary ||
-            `Applied style transfer from "${styleRef.fileName}" across ${nextComp.objects.length} layers.`,
+          `${
+            data.styleTransfer?.styleSummary ||
+            `Applied style transfer from "${styleRef.fileName}" across ${nextComp.objects.length} layers.`
+          }${usedTag}`,
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Style transfer failed.');
@@ -185,6 +243,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            modelId: selectedModelId,
             width: composition.width,
             height: composition.height,
             duration: composition.duration,
@@ -205,9 +264,12 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
         if (!res.ok) throw new Error(data.error || 'Auto-compose failed');
         const nextComp = applyAutoComposePlan(composition, data.compositionPlan ?? {});
         onApplyScene(nextComp);
+        const usedTag = data.modelUsed?.label ? ` (${data.modelUsed.label})` : '';
         setStatusNote(
-          data.compositionPlan?.compositionNotes ||
-            `Re-composed ${nextComp.objects.length} layers with "${layoutGoal}" arrangement.`,
+          `${
+            data.compositionPlan?.compositionNotes ||
+            `Re-composed ${nextComp.objects.length} layers with "${layoutGoal}" arrangement.`
+          }${usedTag}`,
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Auto-compose failed.');
@@ -228,6 +290,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            modelId: selectedModelId,
             keywords: prompt,
             category: assetCategory,
             aesthetic: assetAesthetic,
@@ -246,9 +309,12 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
         }
         setGeneratedAssets(normalized);
         setAddedAssetIds({});
+        const usedTag = data.modelUsed?.label ? ` (${data.modelUsed.label})` : '';
         setStatusNote(
-          data.designNotes ||
-            `Generated ${normalized.length} diverse motion graphic asset${normalized.length > 1 ? 's' : ''}. Add them below.`,
+          `${
+            data.designNotes ||
+            `Generated ${normalized.length} diverse motion graphic asset${normalized.length > 1 ? 's' : ''}. Add them below.`
+          }${usedTag}`,
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Asset generation failed.');
@@ -270,6 +336,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            modelId: selectedModelId,
             prompt,
             stylePreset,
             width: composition.width,
@@ -285,7 +352,8 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           composition.height,
         );
         onApplyScene(nextComp);
-        setStatusNote(`Generated "${nextComp.name}" with ${nextComp.objects.length} animated layers.`);
+        const usedTag = data.modelUsed?.label ? ` via ${data.modelUsed.label}` : '';
+        setStatusNote(`Generated "${nextComp.name}" with ${nextComp.objects.length} animated layers${usedTag}.`);
         onReturnToEditor();
       } else if (mode === 'choreograph') {
         const target = selectedObject ?? composition.objects[0];
@@ -296,6 +364,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            modelId: selectedModelId,
             prompt,
             duration: composition.duration,
             objectSummary: {
@@ -335,7 +404,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
         const res = await fetch('/api/ai/style-palette', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ modelId: selectedModelId, prompt }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Palette styling failed');
@@ -368,25 +437,159 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
   };
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[#0D0F13] px-8 py-7">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
+    <main className="flex-1 overflow-y-auto bg-slate-100 dark:bg-[#0D0F13] px-4 py-5 sm:px-8 sm:py-7">
+      <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-800/80 pb-4">
           <div>
-            <h1 className="font-display text-2xl font-bold text-white tracking-tight">
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               AI Motion Director
             </h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
               Transfer visual & motion styles from image or video references, auto-compose stage arrangements, and forge diverse kinetic assets.
             </p>
           </div>
           <button
             type="button"
             onClick={onReturnToEditor}
-            className="px-3.5 py-2 rounded-lg border border-slate-700 bg-[#151922] hover:bg-[#1C212D] text-xs font-medium text-slate-200 cursor-pointer"
+            className="min-h-[40px] sm:min-h-0 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white hover:bg-slate-50 dark:bg-[#151922] dark:hover:bg-[#1C212D] text-xs font-medium text-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap shrink-0"
           >
             Back to Stage
           </button>
         </div>
+
+        {/* Free AI Engine & Model Selector */}
+        <section
+          aria-label="Free AI model engine selector"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141821] p-4 space-y-3 shadow-sm dark:shadow-none"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-blue-400 shrink-0" />
+              <label
+                htmlFor="ai-model-select"
+                className="text-xs font-semibold text-slate-900 dark:text-white"
+              >
+                Free AI Model Engine
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter models by family">
+              {(
+                [
+                  { id: 'all', label: `All Free (${models.length})` },
+                  { id: 'deepseek', label: 'DeepSeek' },
+                  { id: 'glm', label: 'Z.ai GLM' },
+                  { id: 'gemini', label: 'Gemini' },
+                  { id: 'more', label: 'Qwen · Nemotron · Llama' },
+                ] as const
+              ).map((tab) => {
+                const active = familyFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => handleFamilySelect(tab.id)}
+                    className={`min-h-[34px] sm:min-h-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      active
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300 dark:bg-[#0D1017] dark:text-slate-300 dark:border-slate-800 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            <div className="md:col-span-6">
+              <select
+                id="ai-model-select"
+                value={selectedModelId}
+                onChange={(e) => {
+                  setSelectedModelId(e.target.value);
+                  setError(null);
+                }}
+                className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-300 dark:border-slate-700 focus:border-blue-500 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 dark:text-white outline-none"
+              >
+                {filteredModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.providerLabel} ({m.tierLabel} · {m.supportsVision ? 'Vision + Motion' : 'Text/JSON'})
+                    {!m.configured && m.envVar ? ` [Needs ${m.envVar}]` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedModel && (
+              <div className="md:col-span-6 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedModel.label}</span>
+                <span className="text-slate-400 dark:text-slate-500"> · </span>
+                <span>{selectedModel.providerLabel}</span>
+                <span className="text-slate-400 dark:text-slate-500"> · </span>
+                <span className={selectedModel.configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300'}>
+                  {selectedModel.keyless
+                    ? 'Keyless Free Ready'
+                    : selectedModel.configured
+                      ? 'Ready'
+                      : `Requires ${selectedModel.envVar} Secret`}
+                </span>
+                <span className="text-slate-400 dark:text-slate-500"> · </span>
+                <span className="text-slate-500 dark:text-slate-400">{selectedModel.contextLabel}</span>
+                <p className="text-slate-500 dark:text-slate-400 mt-0.5 truncate">{selectedModel.bestFor}</p>
+              </div>
+            )}
+          </div>
+
+          {selectedModel &&
+            (mode === 'style-transfer' && !selectedModel.supportsVision ? (
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-blue-800 dark:text-blue-200">
+                <span>
+                  {!selectedModel.configured && selectedModel.envVar
+                    ? `${selectedModel.label} is text-only and requires ${selectedModel.envVar}. Style Transfer requires a vision-capable model:`
+                    : `${selectedModel.label} is text-only. Style Transfer inspects uploaded images & video frames and requires a vision-capable model:`}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {visionModels.slice(0, 3).map((vm) => (
+                    <button
+                      key={vm.id}
+                      type="button"
+                      onClick={() => setSelectedModelId(vm.id)}
+                      className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 dark:bg-[#0D1017] dark:hover:bg-slate-800 dark:border-slate-700 dark:text-slate-100 font-medium cursor-pointer whitespace-nowrap"
+                    >
+                      Switch to {vm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : !selectedModel.configured && selectedModel.envVar ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-800 dark:text-amber-200">
+                <span>
+                  Server secret{' '}
+                  <code className="font-mono-tabular text-amber-900 dark:text-amber-100">{selectedModel.envVar}</code> is
+                  not set yet. Add it in Settings &gt; Secrets to run {selectedModel.label}, or
+                  switch to a configured model right now.
+                </span>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModelId(DEFAULT_AI_MODEL_ID)}
+                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 dark:bg-[#0D1017] dark:hover:bg-slate-800 dark:border-slate-700 dark:text-slate-100 font-medium cursor-pointer whitespace-nowrap"
+                  >
+                    Use Gemini 4 Hydrogen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModelId('gemini:gemini-3.8-flash')}
+                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 dark:bg-[#0D1017] dark:hover:bg-slate-800 dark:border-slate-700 dark:text-slate-100 font-medium cursor-pointer whitespace-nowrap"
+                  >
+                    Use Gemini 3.8 Flash
+                  </button>
+                </div>
+              </div>
+            ) : null)}
+        </section>
 
         {/* 6-Mode Selector */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
@@ -443,14 +646,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
                   active
                     ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-slate-800 bg-[#141821] hover:border-slate-700'
+                    : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-[#141821] dark:hover:border-slate-700'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   {item.icon}
-                  <span className="text-xs font-semibold text-white">{item.label}</span>
+                  <span className="text-xs font-semibold text-slate-900 dark:text-white">{item.label}</span>
                 </div>
-                <p className="text-[11px] text-slate-400">{item.desc}</p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">{item.desc}</p>
               </button>
             );
           })}
@@ -459,25 +662,25 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
         {/* Active Mode Form */}
         <form
           onSubmit={handleSubmit}
-          className="rounded-xl border border-slate-800 bg-[#141821] p-5 space-y-4"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141821] p-4 sm:p-5 space-y-4 shadow-sm dark:shadow-none"
         >
           {mode === 'style-transfer' && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-white">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Reference Image or Video Upload
                   </h2>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
                     Upload any frame, poster, moodboard image, or motion clip (MP4/WebM) to transfer its palette, glow, grain, typography, and motion energy onto your current composition.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => styleFileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-700 bg-[#1B202C] hover:bg-slate-800 text-xs font-medium text-white cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-2 min-h-[40px] sm:min-h-0 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-[#1B202C] dark:hover:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white cursor-pointer shrink-0"
                 >
-                  <ImagePlus className="w-4 h-4 text-blue-400" />
+                  <ImagePlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span>{styleRef ? 'Replace Reference' : 'Upload Image or Video'}</span>
                 </button>
                 <input
@@ -491,15 +694,15 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               </div>
 
               {samplingMedia && (
-                <div className="rounded-lg border border-slate-800 bg-[#0D1017] p-4 text-xs text-slate-300">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1017] p-4 text-xs text-slate-700 dark:text-slate-300">
                   Sampling reference frames...
                 </div>
               )}
 
               {styleRef ? (
-                <div className="rounded-lg border border-slate-800 bg-[#0D1017] p-3.5 space-y-3">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1017] p-3.5 space-y-3">
                   <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-slate-200 font-medium truncate">
+                    <span className="text-slate-800 dark:text-slate-200 font-medium truncate">
                       {styleRef.fileName}{' '}
                       <span className="text-slate-500">
                         · {styleRef.kind === 'video' ? `Video (${styleRef.frames.length} sampled frames)` : 'Image'}
@@ -509,7 +712,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                       type="button"
                       onClick={() => setStyleRef(null)}
                       aria-label="Clear style reference"
-                      className="p-1 text-slate-400 hover:text-red-400 cursor-pointer"
+                      className="p-1 text-slate-600 dark:text-slate-400 hover:text-red-400 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -523,7 +726,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                           referrerPolicy="no-referrer"
                           className="w-full h-24 object-cover rounded border border-slate-800 bg-black"
                         />
-                        <p className="text-[10px] text-slate-400 font-mono-tabular">
+                        <p className="text-[10px] text-slate-600 dark:text-slate-400 font-mono-tabular">
                           {frame.label}
                         </p>
                       </div>
@@ -534,9 +737,9 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => styleFileInputRef.current?.click()}
-                  className="w-full rounded-lg border border-dashed border-slate-700 hover:border-blue-500/70 bg-[#0D1017] py-7 px-4 text-center transition-colors cursor-pointer"
+                  className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500/70 bg-slate-50 dark:bg-[#0D1017] py-7 px-4 text-center transition-colors cursor-pointer"
                 >
-                  <p className="text-xs font-medium text-slate-200">
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
                     Click to select a PNG, JPG, WebP, MP4, or WebM style reference
                   </p>
                   <p className="text-[11px] text-slate-500 mt-1">
@@ -548,7 +751,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               {/* Artistic Customization Controls */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div>
-                  <div className="flex justify-between text-xs text-slate-300 mb-1.5">
+                  <div className="flex justify-between text-xs text-slate-700 dark:text-slate-300 mb-1.5">
                     <label htmlFor="style-intensity">Style Transfer Strength</label>
                     <span className="font-mono-tabular text-blue-400">
                       {Math.round(styleIntensity * 100)}%
@@ -566,7 +769,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                   />
                 </div>
 
-                <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0D1017] px-3.5 py-2.5 text-xs text-slate-200 cursor-pointer">
+                <label className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1017] px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 cursor-pointer">
                   <span>Adapt motion pacing &amp; entrance FX from reference</span>
                   <input
                     type="checkbox"
@@ -577,7 +780,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               </div>
 
               <div>
-                <label htmlFor="style-directive" className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="style-directive" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Artistic Customization Note (Optional)
                 </label>
                 <input
@@ -586,7 +789,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                   value={styleDirective}
                   onChange={(e) => setStyleDirective(e.target.value)}
                   placeholder="e.g. Preserve crisp white headline, emphasize film grain and warm rim glow..."
-                  className="w-full rounded-lg bg-[#0D1017] border border-slate-800 focus:border-blue-500 px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 focus:border-blue-500 px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 outline-none"
                 />
               </div>
             </div>
@@ -594,30 +797,30 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
 
           {mode === 'auto-compose' && (
             <div className="space-y-4">
-              <div className="rounded-lg border border-slate-800 bg-[#0D1017] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-slate-300">
+              <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1017] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-slate-700 dark:text-slate-300">
                   Analyzing{' '}
-                  <strong className="text-white font-mono-tabular">
+                  <strong className="text-slate-900 dark:text-white font-mono-tabular">
                     {composition.objects.length}
                   </strong>{' '}
                   active stage assets ({composition.width}×{composition.height} ·{' '}
                   {composition.duration}s)
                 </span>
-                <span className="text-slate-400 truncate max-w-md">
+                <span className="text-slate-600 dark:text-slate-400 truncate max-w-md">
                   {composition.objects.map((o) => o.name).join(' · ') || 'No layers on stage'}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label htmlFor="ac-layout" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ac-layout" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Layout Arrangement
                   </label>
                   <select
                     id="ac-layout"
                     value={layoutGoal}
                     onChange={(e) => setLayoutGoal(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Hero Centerpiece">Hero Centerpiece</option>
                     <option value="Split Editorial">Split Editorial (Left/Right)</option>
@@ -628,14 +831,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="ac-pacing" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ac-pacing" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Animation Pacing
                   </label>
                   <select
                     id="ac-pacing"
                     value={pacing}
                     onChange={(e) => setPacing(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Calm Filmic">Calm Filmic</option>
                     <option value="Balanced Studio">Balanced Studio</option>
@@ -644,14 +847,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="ac-trans" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ac-trans" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Timing & Transitions
                   </label>
                   <select
                     id="ac-trans"
                     value={transitionStyle}
                     onChange={(e) => setTransitionStyle(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Staggered Wave">Staggered Wave</option>
                     <option value="Simultaneous Pop">Simultaneous Impact</option>
@@ -661,7 +864,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               </div>
 
               <div>
-                <label htmlFor="ac-notes" className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="ac-notes" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Composition Preferences (Optional)
                 </label>
                 <input
@@ -670,7 +873,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                   value={composeNotesInput}
                   onChange={(e) => setComposeNotesInput(e.target.value)}
                   placeholder="e.g. Keep headline prominent at top third, orbit shapes cleanly behind text, stagger entries by 0.2s..."
-                  className="w-full rounded-lg bg-[#0D1017] border border-slate-800 focus:border-blue-500 px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 focus:border-blue-500 px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 outline-none"
                 />
               </div>
             </div>
@@ -680,14 +883,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
             <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <label htmlFor="ag-category" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ag-category" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Element Focus
                   </label>
                   <select
                     id="ag-category"
                     value={assetCategory}
                     onChange={(e) => setAssetCategory(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="All Diverse Elements">All Diverse Elements</option>
                     <option value="Animated Shapes & SVG">Animated Shapes &amp; SVG</option>
@@ -698,14 +901,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="ag-aesthetic" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ag-aesthetic" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Style Preset
                   </label>
                   <select
                     id="ag-aesthetic"
                     value={assetAesthetic}
                     onChange={(e) => setAssetAesthetic(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Modern Kinetic">Modern Kinetic</option>
                     <option value="Editorial Luxury">Editorial Luxury</option>
@@ -716,14 +919,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="ag-energy" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ag-energy" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Motion Energy
                   </label>
                   <select
                     id="ag-energy"
                     value={assetEnergy}
                     onChange={(e) => setAssetEnergy(e.target.value)}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Subtle">Subtle &amp; Calm</option>
                     <option value="Dynamic">Dynamic</option>
@@ -732,14 +935,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="ag-count" className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <label htmlFor="ag-count" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Assets to Generate
                   </label>
                   <select
                     id="ag-count"
                     value={assetCount}
                     onChange={(e) => setAssetCount(Number(e.target.value))}
-                    className="w-full bg-[#0D1017] border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-100 outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value={1}>1 Hero Asset</option>
                     <option value={3}>3 Coordinated Assets</option>
@@ -749,7 +952,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               </div>
 
               <div>
-                <label htmlFor="ai-prompt-input" className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="ai-prompt-input" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Descriptive Keywords or Element Brief
                 </label>
                 <textarea
@@ -758,12 +961,12 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe the shapes, text effects, transition wipes, or procedural motion objects to generate..."
-                  className="w-full rounded-lg bg-[#0D1017] border border-slate-800 focus:border-blue-500 p-3 text-sm text-white placeholder:text-slate-500 outline-none"
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 focus:border-blue-500 p-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[11px] font-medium text-slate-400">
+                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
                   Keyword Presets
                 </span>
                 <div className="flex flex-wrap gap-2">
@@ -772,7 +975,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                       key={sample}
                       type="button"
                       onClick={() => setPrompt(sample)}
-                      className="text-left text-[11px] px-2.5 py-1.5 rounded-md border border-slate-800 bg-[#181D27] hover:border-slate-600 text-slate-300 cursor-pointer"
+                      className="text-left text-[11px] px-2.5 py-1.5 rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200 dark:bg-[#181D27] dark:hover:border-slate-600 dark:border-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
                     >
                       {sample}
                     </button>
@@ -786,14 +989,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
             <>
               {mode === 'scene' && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <label htmlFor="ai-style-preset" className="text-xs font-medium text-slate-300">
+                  <label htmlFor="ai-style-preset" className="text-xs font-medium text-slate-700 dark:text-slate-300">
                     Style Direction
                   </label>
                   <select
                     id="ai-style-preset"
                     value={stylePreset}
                     onChange={(e) => setStylePreset(e.target.value)}
-                    className="bg-[#1B202C] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none"
+                    className="bg-slate-50 dark:bg-[#1B202C] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="Modern Kinetic">Modern Kinetic</option>
                     <option value="Fintech Broadcast">Fintech Broadcast</option>
@@ -805,16 +1008,16 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
               )}
 
               {mode === 'choreograph' && (
-                <div className="text-xs text-slate-300 bg-[#1A1F2B] border border-slate-800 rounded-lg px-3 py-2">
+                <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-[#1A1F2B] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
                   Target Layer:{' '}
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-slate-900 dark:text-white">
                     {selectedObject?.name ?? composition.objects[0]?.name ?? 'None selected'}
                   </span>
                 </div>
               )}
 
               <div>
-                <label htmlFor="ai-prompt-input" className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="ai-prompt-input" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Creative Prompt
                 </label>
                 <textarea
@@ -829,13 +1032,13 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                         ? 'Describe how the selected layer should move (e.g. "Slide in from the left with elastic bounce, float gently, and fade out at 5s")...'
                         : 'Describe a brand mood or visual direction (e.g. "Nordic clean-tech slate and glacier cyan with editorial serif headings")...'
                   }
-                  className="w-full rounded-lg bg-[#0D1017] border border-slate-800 focus:border-blue-500 p-3 text-sm text-white placeholder:text-slate-500 outline-none"
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0D1017] border border-slate-200 dark:border-slate-800 focus:border-blue-500 p-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 outline-none"
                 />
               </div>
 
               {mode === 'scene' && (
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-medium text-slate-400">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
                     Quick Prompts
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -844,7 +1047,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                         key={sample}
                         type="button"
                         onClick={() => setPrompt(sample)}
-                        className="text-left text-[11px] px-2.5 py-1.5 rounded-md border border-slate-800 bg-[#181D27] hover:border-slate-600 text-slate-300 cursor-pointer"
+                        className="text-left text-[11px] px-2.5 py-1.5 rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200 dark:bg-[#181D27] dark:hover:border-slate-600 dark:border-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
                       >
                         {sample}
                       </button>
@@ -858,14 +1061,14 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
           {error && (
             <div
               role="alert"
-              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-300"
+              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>
           )}
 
           {statusNote && (
-            <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-300">
+            <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-700 dark:text-emerald-300">
               {statusNote}
             </div>
           )}
@@ -874,7 +1077,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
             <button
               type="submit"
               disabled={loading || samplingMedia}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[42px] sm:min-h-0 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors cursor-pointer"
             >
               <Wand2 className="w-4 h-4" />
               <span>
@@ -900,21 +1103,21 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
         {mode === 'assets' && generatedAssets.length > 0 && (
           <section
             aria-label="Generated motion assets"
-            className="rounded-xl border border-slate-800 bg-[#141821] p-5 space-y-4"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141821] p-4 sm:p-5 space-y-4 shadow-sm dark:shadow-none"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                   Generated Motion Elements
                 </h2>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   Add individual elements or import the full coordinated set onto your stage.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleAddAllGenerated}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
+                className="inline-flex items-center gap-1.5 min-h-[40px] sm:min-h-0 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add All to Stage</span>
@@ -931,12 +1134,12 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                 return (
                   <div
                     key={asset.id}
-                    className="rounded-lg border border-slate-800 bg-[#0D1017] p-3.5 flex items-center justify-between gap-3"
+                    className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D1017] p-3.5 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-3 h-3 rounded-sm shrink-0 border border-white/20"
+                          className="w-3 h-3 rounded-sm shrink-0 border border-slate-900/15 dark:border-white/20"
                           style={{
                             backgroundColor:
                               asset.style.fillMode === 'none'
@@ -944,11 +1147,11 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                                 : asset.style.fillColor,
                           }}
                         />
-                        <span className="text-xs font-semibold text-white truncate">
+                        <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">
                           {asset.name}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
                         {asset.type} · {asset.behavior.entrancePreset} · {kfCount} keyframes
                       </p>
                     </div>
@@ -956,7 +1159,7 @@ export const AiDirectorPanel: React.FC<AiDirectorPanelProps> = ({
                       type="button"
                       disabled={isAdded}
                       onClick={() => handleAddSingleGenerated(asset)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-xs font-medium text-white shrink-0 cursor-pointer"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-slate-200 hover:bg-slate-300 text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-60 text-xs font-medium dark:text-white shrink-0 cursor-pointer"
                     >
                       {isAdded ? (
                         <>

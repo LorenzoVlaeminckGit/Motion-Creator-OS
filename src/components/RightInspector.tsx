@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Diamond, Plus, Trash2 } from 'lucide-react';
+import { Diamond, Magnet, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  DEFAULT_SMART_SNAP_SETTINGS,
+  type SmartSnapSettings,
+} from '../engine/smartSnap';
 import type {
   AnimatableProperty,
   BackgroundType,
@@ -13,12 +17,14 @@ import type {
   TextRevealMode,
 } from '../types/motion';
 
-type InspectorTab = 'object' | 'motion' | 'scene';
+type InspectorTab = 'object' | 'motion' | 'scene' | 'snap';
 
 interface RightInspectorProps {
   composition: MotionComposition;
   selectedObject: MotionObject | null;
   currentTime: number;
+  snapSettings: SmartSnapSettings;
+  onChangeSnapSettings: (updater: (prev: SmartSnapSettings) => SmartSnapSettings) => void;
   onUpdateObject: (id: string, updater: (obj: MotionObject) => MotionObject) => void;
   onUpdateComposition: (updater: (comp: MotionComposition) => MotionComposition) => void;
   onAddKeyframe: (id: string, prop: AnimatableProperty, value: number, easing: EasingType) => void;
@@ -26,14 +32,16 @@ interface RightInspectorProps {
 }
 
 const INPUT_CLASS =
-  'w-full bg-[#181C26] border border-slate-800 focus:border-blue-500 rounded px-2 py-1.5 text-xs text-slate-100 font-mono-tabular outline-none';
+  'w-full bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2.5 py-2 lg:px-2 lg:py-1.5 text-xs text-slate-900 dark:text-slate-100 font-mono-tabular outline-none';
 
-const LABEL_CLASS = 'block text-[11px] font-medium text-slate-400 mb-1';
+const LABEL_CLASS = 'block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1';
 
 export const RightInspector: React.FC<RightInspectorProps> = ({
   composition,
   selectedObject,
   currentTime,
+  snapSettings,
+  onChangeSnapSettings,
   onUpdateObject,
   onUpdateComposition,
   onAddKeyframe,
@@ -70,25 +78,27 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
   return (
     <aside
       aria-label="Properties inspector"
-      className="w-[316px] shrink-0 border-l border-slate-800/80 bg-[#12151D] flex flex-col min-h-0"
+      className="w-full lg:w-[316px] h-full shrink-0 lg:border-l border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#12151D] flex flex-col min-h-0"
     >
       {/* Inspector Tabs */}
-      <div className="p-2 border-b border-slate-800/80 grid grid-cols-3 gap-1 bg-[#11141B]">
+      <div className="p-2 border-b border-slate-200 dark:border-slate-800/80 grid grid-cols-4 gap-1 bg-slate-100 dark:bg-[#11141B] shrink-0">
         {(
           [
             { id: 'object', label: 'Object' },
             { id: 'motion', label: 'Motion' },
             { id: 'scene', label: 'Scene' },
+            { id: 'snap', label: 'Snap' },
           ] as { id: InspectorTab; label: string }[]
         ).map((item) => (
           <button
             key={item.id}
             type="button"
+            data-testid={`inspector-tab-${item.id}`}
             onClick={() => setTab(item.id)}
-            className={`py-1.5 rounded text-xs font-medium transition-colors cursor-pointer ${
+            className={`min-h-[40px] lg:min-h-0 py-1.5 rounded text-xs font-medium cursor-pointer whitespace-nowrap ${
               tab === item.id
-                ? 'bg-[#1D2330] text-white'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-900 shadow-sm dark:shadow-none dark:bg-[#1D2330] dark:text-white'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             {item.label}
@@ -97,11 +107,212 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-5">
-        {tab === 'scene' ? (
+        {tab === 'snap' ? (
+          <div data-testid="inspector-snap-panel" className="space-y-5">
+            {/* Master Smart Snap Toggle */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Magnet className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" aria-hidden="true" />
+                  <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
+                    Smart Snap Settings
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={snapSettings.enabled}
+                  aria-label="Enable Smart Snap"
+                  data-testid="snap-master-toggle"
+                  onClick={() =>
+                    onChangeSnapSettings((prev) => ({ ...prev, enabled: !prev.enabled }))
+                  }
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+                    snapSettings.enabled
+                      ? 'bg-cyan-600 border-cyan-500'
+                      : 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
+                      snapSettings.enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                Highlight magnetic alignment guides when dragging objects on the stage. Synced with the Canvas toolbar Snap button.
+              </p>
+            </div>
+
+            {/* Guide Types */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
+                Active Guide Types
+              </h3>
+
+              {(
+                [
+                  {
+                    key: 'canvasCenter' as const,
+                    title: 'Canvas Center Guides',
+                    description: 'Snap to vertical & horizontal stage midlines',
+                    testId: 'snap-toggle-canvas-center',
+                  },
+                  {
+                    key: 'objectCenter' as const,
+                    title: 'Center-to-Center Alignment',
+                    description: 'Align layer centers with sibling objects',
+                    testId: 'snap-toggle-object-center',
+                  },
+                  {
+                    key: 'objectEdge' as const,
+                    title: 'Edge-to-Edge Alignment',
+                    description: 'Align left, right, top & bottom bounding edges',
+                    testId: 'snap-toggle-object-edge',
+                  },
+                ]
+              ).map((item) => {
+                const checked = snapSettings[item.key];
+                return (
+                  <div
+                    key={item.key}
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${
+                      snapSettings.enabled
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-[#171B24]'
+                        : 'border-slate-200/70 dark:border-slate-800/60 bg-slate-50/40 dark:bg-[#141821] opacity-60'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-900 dark:text-slate-100">
+                        {item.title}
+                      </p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        {item.description}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={checked}
+                      aria-label={item.title}
+                      data-testid={item.testId}
+                      onClick={() =>
+                        onChangeSnapSettings((prev) => ({
+                          ...prev,
+                          [item.key]: !prev[item.key],
+                        }))
+                      }
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+                        checked
+                          ? 'bg-blue-600 border-blue-500'
+                          : 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform ${
+                          checked ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Sensitivity Threshold */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="snap-threshold-slider"
+                  className="text-xs font-semibold text-slate-900 dark:text-slate-200"
+                >
+                  Snap Sensitivity Threshold
+                </label>
+                <span
+                  data-testid="snap-threshold-value"
+                  className="text-xs font-mono tabular-nums font-semibold text-cyan-700 dark:text-cyan-400"
+                >
+                  {snapSettings.threshold} px
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <input
+                  id="snap-threshold-slider"
+                  data-testid="snap-threshold-slider"
+                  type="range"
+                  min={4}
+                  max={48}
+                  step={1}
+                  value={snapSettings.threshold}
+                  onChange={(e) => {
+                    const nextVal = Math.max(4, Math.min(48, Number(e.target.value) || 16));
+                    onChangeSnapSettings((prev) => ({ ...prev, threshold: nextVal }));
+                  }}
+                  className="flex-1 cursor-pointer accent-cyan-500"
+                />
+                <input
+                  type="number"
+                  aria-label="Snap threshold pixels"
+                  data-testid="snap-threshold-input"
+                  min={4}
+                  max={48}
+                  value={snapSettings.threshold}
+                  onChange={(e) => {
+                    const nextVal = Math.max(4, Math.min(48, Number(e.target.value) || 16));
+                    onChangeSnapSettings((prev) => ({ ...prev, threshold: nextVal }));
+                  }}
+                  className="w-16 bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-xs text-right text-slate-900 dark:text-slate-100 font-mono tabular-nums outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { label: 'Fine · 6px', value: 6 },
+                  { label: 'Balanced · 16px', value: 16 },
+                  { label: 'Strong · 32px', value: 32 },
+                ].map((preset) => {
+                  const active = snapSettings.threshold === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() =>
+                        onChangeSnapSettings((prev) => ({ ...prev, threshold: preset.value }))
+                      }
+                      className={`min-h-[34px] lg:min-h-0 px-2 py-1.5 rounded border text-[11px] font-medium cursor-pointer whitespace-nowrap ${
+                        active
+                          ? 'border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#181C26] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Hold <span className="font-mono font-medium">Alt</span> while dragging to bypass.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onChangeSnapSettings(() => ({ ...DEFAULT_SMART_SNAP_SETTINGS }))}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white cursor-pointer shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                  <span>Reset</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : tab === 'scene' ? (
           <>
             {/* Composition Settings */}
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-slate-200">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                 Composition & Timing
               </h3>
               <div className="grid grid-cols-2 gap-2.5">
@@ -206,8 +417,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             {/* Background */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-3">
-              <h3 className="text-xs font-semibold text-slate-200">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                 Backdrop Engine
               </h3>
               <div>
@@ -251,12 +462,12 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                           background: { ...c.background, [ck]: e.target.value },
                         }))
                       }
-                      className="w-full h-8 rounded bg-[#181C26] border border-slate-800 cursor-pointer"
+                      className="w-full h-8 rounded bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 cursor-pointer"
                     />
                   </div>
                 ))}
               </div>
-              <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+              <label className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
                 <span>Animate Backdrop</span>
                 <input
                   type="checkbox"
@@ -273,12 +484,12 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             {/* Camera & Post FX */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-3">
-              <h3 className="text-xs font-semibold text-slate-200">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                 Camera Rig & Post-FX
               </h3>
               <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                   <label htmlFor="cam-zoom">Camera Zoom</label>
                   <span className="font-mono-tabular">{composition.camera.zoom.toFixed(2)}x</span>
                 </div>
@@ -299,7 +510,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                 />
               </div>
               <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                   <label htmlFor="cam-drift">Handheld Drift</label>
                   <span className="font-mono-tabular">
                     {Math.round(composition.camera.handheldDrift * 100)}%
@@ -322,7 +533,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                 />
               </div>
               <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                   <label htmlFor="cam-vignette">Vignette</label>
                   <span className="font-mono-tabular">
                     {Math.round(composition.camera.vignette * 100)}%
@@ -345,7 +556,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                 />
               </div>
               <div>
-                <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                   <label htmlFor="cam-grain">Film Grain</label>
                   <span className="font-mono-tabular">
                     {Math.round(composition.camera.filmGrain * 100)}%
@@ -371,7 +582,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
           </>
         ) : !selectedObject ? (
           <div className="py-12 text-center">
-            <p className="text-xs font-medium text-slate-300 mb-1">
+            <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               No Layer Selected
             </p>
             <p className="text-[11px] text-slate-500">
@@ -441,8 +652,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             {/* Transform */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
-              <h3 className="text-xs font-semibold text-slate-200">Transform</h3>
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">Transform</h3>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="tr-x" className={LABEL_CLASS}>X</label>
@@ -514,8 +725,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
 
             {/* Type-Specific Settings: Text / Counter */}
             {(selectedObject.type === 'text' || selectedObject.type === 'counter') && (
-              <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
-                <h3 className="text-xs font-semibold text-slate-200">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+                <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                   {selectedObject.type === 'counter' ? 'Counter & Typography' : 'Kinetic Typography'}
                 </h3>
                 <div>
@@ -669,7 +880,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
 
             {/* Type-Specific Settings: SVG Path / Shape */}
             {selectedObject.type === 'path' && (
-              <div className="pt-4 border-t border-slate-800/80 space-y-2">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
                 <label htmlFor="svg-path-input" className={LABEL_CLASS}>
                   SVG Path (0–100 ViewBox)
                 </label>
@@ -694,8 +905,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
               selectedObject.type === 'orbit' ||
               selectedObject.type === 'blob' ||
               selectedObject.type === 'grid') && (
-              <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
-                <h3 className="text-xs font-semibold text-slate-200">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+                <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                   Procedural Generator
                 </h3>
                 {selectedObject.type === 'particles' && (
@@ -817,8 +1028,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             )}
 
             {/* Appearance & FX */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
-              <h3 className="text-xs font-semibold text-slate-200">Appearance & FX</h3>
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">Appearance & FX</h3>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="st-fillmode" className={LABEL_CLASS}>Fill Mode</label>
@@ -859,7 +1070,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                     type="color"
                     value={selectedObject.style.fillColor}
                     onChange={(e) => updateStyle('fillColor', e.target.value)}
-                    className="w-full h-8 rounded bg-[#181C26] border border-slate-800 cursor-pointer"
+                    className="w-full h-8 rounded bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 cursor-pointer"
                   />
                 </div>
                 <div>
@@ -869,7 +1080,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                     type="color"
                     value={selectedObject.style.fillColor2}
                     onChange={(e) => updateStyle('fillColor2', e.target.value)}
-                    className="w-full h-8 rounded bg-[#181C26] border border-slate-800 cursor-pointer"
+                    className="w-full h-8 rounded bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 cursor-pointer"
                   />
                 </div>
                 <div>
@@ -879,7 +1090,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                     type="color"
                     value={selectedObject.style.strokeColor}
                     onChange={(e) => updateStyle('strokeColor', e.target.value)}
-                    className="w-full h-8 rounded bg-[#181C26] border border-slate-800 cursor-pointer"
+                    className="w-full h-8 rounded bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800 cursor-pointer"
                   />
                 </div>
               </div>
@@ -916,7 +1127,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
           /* Motion Tab */
           <>
             <div className="space-y-2.5">
-              <h3 className="text-xs font-semibold text-slate-200">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                 Entrance & Exit
               </h3>
               <div className="grid grid-cols-2 gap-2">
@@ -1013,8 +1224,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             {/* Continuous Kinetic Physics */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
-              <h3 className="text-xs font-semibold text-slate-200">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                 Continuous Kinetic Modifiers
               </h3>
               <div className="grid grid-cols-2 gap-2">
@@ -1097,9 +1308,9 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             {/* Keyframe Inspector */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-slate-200">
+                <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                   Keyframes @ {currentTime.toFixed(2)}s
                 </h3>
               </div>
@@ -1154,12 +1365,12 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                   (selectedObject.keyframes[prop] ?? []).map((kf) => (
                     <div
                       key={kf.id}
-                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-[#181C26] border border-slate-800/80 text-[11px]"
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-slate-50 dark:bg-[#181C26] border border-slate-200 dark:border-slate-800/80 text-[11px]"
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <Diamond className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                        <span className="font-medium text-slate-200">{prop}</span>
-                        <span className="font-mono-tabular text-slate-400">
+                        <Diamond className="w-2.5 h-2.5 text-amber-500 dark:text-amber-400 shrink-0" />
+                        <span className="font-medium text-slate-900 dark:text-slate-200">{prop}</span>
+                        <span className="font-mono-tabular text-slate-600 dark:text-slate-400">
                           {kf.time.toFixed(2)}s → {kf.value}
                         </span>
                       </div>
@@ -1167,7 +1378,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                         type="button"
                         onClick={() => onRemoveKeyframe(selectedObject.id, prop, kf.id)}
                         aria-label={`Remove ${prop} keyframe at ${kf.time.toFixed(2)}s`}
-                        className="p-0.5 text-slate-500 hover:text-red-400 cursor-pointer"
+                        className="p-1.5 lg:p-0.5 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 cursor-pointer"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
